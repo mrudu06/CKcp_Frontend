@@ -29,6 +29,10 @@ export const DEFAULT_LANGUAGE_ID = 109;
 
 export const MAX_SUBMISSIONS = 10;
 
+/** Drive link shown to contestants after completing both questions */
+export const CREATIVES_DRIVE_LINK =
+  ""; // TODO: replace with actual link
+
 /** Map language id to Monaco language identifier */
 export function getMonacoLanguage(languageId: number): string {
   const map: Record<number, string> = {

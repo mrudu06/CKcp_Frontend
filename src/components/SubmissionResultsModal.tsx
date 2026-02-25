@@ -7,12 +7,16 @@ interface SubmissionResultsModalProps {
   result: SubmissionResponse;
   onClose: () => void;
   onViewLeaderboard?: () => void;
+  onNextQuestion?: () => void;
+  driveLink?: string;
 }
 
 export default function SubmissionResultsModal({
   result,
   onClose,
   onViewLeaderboard,
+  onNextQuestion,
+  driveLink,
 }: SubmissionResultsModalProps) {
   const [expandedTests, setExpandedTests] = useState<Set<number>>(new Set());
 
@@ -285,6 +289,24 @@ export default function SubmissionResultsModal({
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm transition-colors"
             >
               View Leaderboard
+            </button>
+          )}
+          {driveLink && (
+            <a
+              href={driveLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm transition-colors"
+            >
+              View Creatives PPT →
+            </a>
+          )}
+          {onNextQuestion && (
+            <button
+              onClick={onNextQuestion}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors"
+            >
+              Proceed to Medium Question →
             </button>
           )}
           <button

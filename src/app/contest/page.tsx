@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react"
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { getTeamId, getTeamName, getToken, clearTeamData } from "@/lib/storage";
-import { DEFAULT_LANGUAGE_ID, MAX_SUBMISSIONS } from "@/lib/constants";
+import { DEFAULT_LANGUAGE_ID, MAX_SUBMISSIONS, CREATIVES_DRIVE_LINK } from "@/lib/constants";
 import { useToast } from "@/components/ToastProvider";
 import QuestionPanel from "@/components/QuestionPanel";
 import SubmissionResultsModal from "@/components/SubmissionResultsModal";
@@ -61,6 +61,10 @@ export default function ContestPage() {
   const [cpTimeTaken, setCpTimeTaken] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Question progression state (easy → medium, one-way)
+  const [activeQuestion, setActiveQuestion] = useState<"easy" | "medium">("easy");
+  const hasInitializedQuestion = useRef(false);
 
   // Auth check on mount
   useEffect(() => {
@@ -124,6 +128,18 @@ export default function ContestPage() {
     }
   }, [teamId, fetchQuestions]);
 
+  // On first data load, jump straight to medium if easy is already done (handles refresh)
+  useEffect(() => {
+    if (!questionsData || hasInitializedQuestion.current) return;
+    const easyDone =
+      questionsData.easy_score >= 100 ||
+      questionsData.easy_submission_count >= MAX_SUBMISSIONS;
+    if (easyDone && questionsData.medium_question) {
+      setActiveQuestion("medium");
+    }
+    hasInitializedQuestion.current = true;
+  }, [questionsData]);
+
   // Start CP timer when contest page loads (only sets if not already set)
   useEffect(() => {
     if (!teamId) return;
@@ -158,10 +174,29 @@ export default function ContestPage() {
     };
   }, [cpStartTime, cpTimeTaken]);
 
-  // Current values (easy only)
-  const currentQuestion = questionsData?.easy_question ?? null;
-  const currentSubmissionCount = questionsData?.easy_submission_count ?? 0;
+  // Current question based on active progression step
+  const currentQuestion =
+    activeQuestion === "easy"
+      ? questionsData?.easy_question ?? null
+      : questionsData?.medium_question ?? null;
+  const currentSubmissionCount =
+    activeQuestion === "easy"
+      ? questionsData?.easy_submission_count ?? 0
+      : questionsData?.medium_submission_count ?? 0;
+  const currentScore =
+    activeQuestion === "easy"
+      ? questionsData?.easy_score ?? 0
+      : questionsData?.medium_score ?? 0;
   const submissionsRemaining = MAX_SUBMISSIONS - currentSubmissionCount;
+
+  // Completion flags
+  const isEasyDone =
+    (questionsData?.easy_score ?? 0) >= 100 ||
+    (questionsData?.easy_submission_count ?? 0) >= MAX_SUBMISSIONS;
+  const isMediumDone =
+    (questionsData?.medium_score ?? 0) >= 100 ||
+    (questionsData?.medium_submission_count ?? 0) >= MAX_SUBMISSIONS;
+  const isContestComplete = isEasyDone && isMediumDone;
 
   const handleSubmit = async () => {
     if (!teamId || !currentQuestion || isSubmitting) return;
@@ -205,8 +240,26 @@ export default function ContestPage() {
   };
 
   const handleCloseResults = () => {
+    // If easy question was just finished (accepted or exhausted), auto-advance to medium
+    if (
+      activeQuestion === "easy" &&
+      submissionResult !== null &&
+      (submissionResult.status === "Accepted" ||
+        submissionResult.submissions_remaining === 0) &&
+      questionsData?.medium_question
+    ) {
+      setActiveQuestion("medium");
+      setCode("");
+    }
     setSubmissionResult(null);
     // Refresh questions data to update scores
+    fetchQuestions();
+  };
+
+  const handleNextQuestion = () => {
+    setSubmissionResult(null);
+    setActiveQuestion("medium");
+    setCode(""); // Clear editor for the new question
     fetchQuestions();
   };
 
@@ -236,11 +289,15 @@ export default function ContestPage() {
             CodeArena
             <span className="text-blue-500">/&gt;</span>
           </h1>
-          {questionsData?.completion_time && (
+          {isContestComplete ? (
             <span className="text-xs px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full font-medium">
               Contest Completed!
             </span>
-          )}
+          ) : isEasyDone ? (
+            <span className="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded-full font-medium">
+              Q1 Done · On Q2
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-4">
           {/* Live Timer */}
@@ -271,22 +328,35 @@ export default function ContestPage() {
       </header>
 
       {/* Completion Banner */}
-      {questionsData?.completion_time && (
-        <div className="bg-emerald-600/20 border-b border-emerald-500/30 px-4 py-2 text-center shrink-0">
+      {isContestComplete ? (
+        <div className="bg-emerald-600/20 border-b border-emerald-500/30 px-4 py-2 shrink-0 flex items-center justify-center gap-4">
           <span className="text-emerald-400 text-sm font-medium">
-            Problem solved! Your contest is complete. Final submission
-            score is locked.
+            🎉 Both questions complete! Your final score is locked.
+          </span>
+          <a
+            href={CREATIVES_DRIVE_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors"
+          >
+            View Creatives PPT →
+          </a>
+        </div>
+      ) : isEasyDone && activeQuestion === "easy" ? (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center shrink-0">
+          <span className="text-amber-400 text-sm font-medium">
+            Easy question done! Proceed to the Medium question.
           </span>
         </div>
-      )}
+      ) : null}
 
       {/* Main Split View */}
       <div className="flex-1 flex min-h-0">
         {/* Left Panel: Question (40%) */}
         <div className="w-[40%] border-r border-[#2a2a2a] bg-[#1a1a1a] flex flex-col min-h-0">
           <QuestionPanel
-            question={questionsData?.easy_question ?? null}
-            score={questionsData?.easy_score ?? 0}
+            question={currentQuestion}
+            score={currentScore}
           />
         </div>
 
@@ -301,7 +371,7 @@ export default function ContestPage() {
               submissionsRemaining={submissionsRemaining}
               isSubmitting={isSubmitting}
               onSubmit={handleSubmit}
-              activeTab="easy"
+              activeTab={activeQuestion}
             />
           </Suspense>
         </div>
@@ -313,6 +383,21 @@ export default function ContestPage() {
           result={submissionResult}
           onClose={handleCloseResults}
           onViewLeaderboard={handleViewLeaderboard}
+          onNextQuestion={
+            activeQuestion === "easy" &&
+            questionsData?.medium_question != null &&
+            (submissionResult.status === "Accepted" ||
+              submissionResult.submissions_remaining === 0)
+              ? handleNextQuestion
+              : undefined
+          }
+          driveLink={
+            activeQuestion === "medium" &&
+            (submissionResult.status === "Accepted" ||
+              submissionResult.submissions_remaining === 0)
+              ? CREATIVES_DRIVE_LINK
+              : undefined
+          }
         />
       )}
     </div>

@@ -52,8 +52,14 @@ export default function QuestionPanel({
               <h2 className="text-xl font-bold text-white">
                 {question.title}
               </h2>
-              <span className="text-xs px-2 py-1 rounded-full font-medium bg-emerald-500/20 text-emerald-400">
-                Easy
+              <span
+                className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  question.difficulty === "medium"
+                    ? "bg-amber-500/20 text-amber-400"
+                    : "bg-emerald-500/20 text-emerald-400"
+                }`}
+              >
+                {question.difficulty === "easy" ? "Easy" : "Medium"}
               </span>
             </div>
 
