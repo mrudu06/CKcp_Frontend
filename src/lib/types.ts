@@ -21,11 +21,20 @@ export interface RoundStartResponse {
 
 export interface QuestionsResponse {
   easy_question: Question | null;
+  /** null until easy_solved === true (hidden by backend until Q1 is solved) */
   medium_question: Question | null;
   easy_score: number;
   medium_score: number;
   easy_submission_count: number;
   medium_submission_count: number;
+  /** true when easy_score === 100 */
+  easy_solved: boolean;
+  /** true when medium_score === 100 */
+  medium_solved: boolean;
+  /** true when both easy_solved && medium_solved */
+  both_solved: boolean;
+  /** populated by backend when both_solved is true */
+  drive_link: string | null;
   completion_time: string | null;
   cp_start_time: string | null;
   cp_time_taken: number | null;
@@ -53,6 +62,12 @@ export interface SubmissionResponse {
   submissions_remaining: number;
   details: TestCaseDetail[];
   message?: string;
+  /** true when the submitted question slot is now fully solved (score === 100) */
+  easy_solved?: boolean;
+  /** true when both questions are solved — drives the completion state */
+  both_solved?: boolean;
+  /** present when both_solved is true */
+  drive_link?: string;
 }
 
 export interface LeaderboardEntry {

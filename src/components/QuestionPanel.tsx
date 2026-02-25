@@ -5,11 +5,13 @@ import { Question } from "@/lib/types";
 interface QuestionPanelProps {
   question: Question | null;
   score: number;
+  questionNumber: 1 | 2;
 }
 
 export default function QuestionPanel({
   question,
   score,
+  questionNumber,
 }: QuestionPanelProps) {
   return (
     <div className="flex flex-col h-full">
@@ -54,12 +56,12 @@ export default function QuestionPanel({
               </h2>
               <span
                 className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  question.difficulty === "medium"
+                  questionNumber === 2
                     ? "bg-amber-500/20 text-amber-400"
-                    : "bg-emerald-500/20 text-emerald-400"
+                    : "bg-blue-500/20 text-blue-400"
                 }`}
               >
-                {question.difficulty === "easy" ? "Easy" : "Medium"}
+                Question {questionNumber} of 2
               </span>
             </div>
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react"
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { getTeamId, getTeamName, getToken, clearTeamData } from "@/lib/storage";
-import { DEFAULT_LANGUAGE_ID, MAX_SUBMISSIONS, CREATIVES_DRIVE_LINK } from "@/lib/constants";
+import { DEFAULT_LANGUAGE_ID, MAX_SUBMISSIONS } from "@/lib/constants";
 import { useToast } from "@/components/ToastProvider";
 import QuestionPanel from "@/components/QuestionPanel";
 import SubmissionResultsModal from "@/components/SubmissionResultsModal";
@@ -128,13 +128,10 @@ export default function ContestPage() {
     }
   }, [teamId, fetchQuestions]);
 
-  // On first data load, jump straight to medium if easy is already done (handles refresh)
+  // On first data load, jump straight to Q2 if Q1 is already solved (handles page refresh)
   useEffect(() => {
     if (!questionsData || hasInitializedQuestion.current) return;
-    const easyDone =
-      questionsData.easy_score >= 100 ||
-      questionsData.easy_submission_count >= MAX_SUBMISSIONS;
-    if (easyDone && questionsData.medium_question) {
+    if (questionsData.easy_solved && questionsData.medium_question) {
       setActiveQuestion("medium");
     }
     hasInitializedQuestion.current = true;
@@ -189,14 +186,13 @@ export default function ContestPage() {
       : questionsData?.medium_score ?? 0;
   const submissionsRemaining = MAX_SUBMISSIONS - currentSubmissionCount;
 
-  // Completion flags
-  const isEasyDone =
-    (questionsData?.easy_score ?? 0) >= 100 ||
-    (questionsData?.easy_submission_count ?? 0) >= MAX_SUBMISSIONS;
-  const isMediumDone =
-    (questionsData?.medium_score ?? 0) >= 100 ||
-    (questionsData?.medium_submission_count ?? 0) >= MAX_SUBMISSIONS;
-  const isContestComplete = isEasyDone && isMediumDone;
+  // Completion flags — driven by server (score === 100 per slot)
+  const isEasyDone = questionsData?.easy_solved ?? false;
+  const isMediumDone = questionsData?.medium_solved ?? false;
+  const isContestComplete = questionsData?.both_solved ?? false;
+
+  // Drive link from server (populated when both_solved)
+  const driveLink = questionsData?.drive_link ?? "";
 
   const handleSubmit = async () => {
     if (!teamId || !currentQuestion || isSubmitting) return;
@@ -239,21 +235,19 @@ export default function ContestPage() {
     }
   };
 
-  const handleCloseResults = () => {
-    // If easy question was just finished (accepted or exhausted), auto-advance to medium
+  const handleCloseResults = async () => {
+    // Refresh first so we have the latest easy_solved flag from the server
+    await fetchQuestions();
+    // Auto-advance to Q2 only when Q1 is now truly solved (score === 100)
     if (
       activeQuestion === "easy" &&
-      submissionResult !== null &&
-      (submissionResult.status === "Accepted" ||
-        submissionResult.submissions_remaining === 0) &&
-      questionsData?.medium_question
+      submissionResult?.status === "Accepted"
     ) {
+      // medium_question availability is checked in the effect after data refresh
       setActiveQuestion("medium");
       setCode("");
     }
     setSubmissionResult(null);
-    // Refresh questions data to update scores
-    fetchQuestions();
   };
 
   const handleNextQuestion = () => {
@@ -297,7 +291,11 @@ export default function ContestPage() {
             <span className="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded-full font-medium">
               Q1 Done · On Q2
             </span>
-          ) : null}
+          ) : (
+            <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full font-medium">
+              Q1 of 2
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-4">
           {/* Live Timer */}
@@ -333,19 +331,21 @@ export default function ContestPage() {
           <span className="text-emerald-400 text-sm font-medium">
             🎉 Both questions complete! Your final score is locked.
           </span>
-          <a
-            href={CREATIVES_DRIVE_LINK}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors"
-          >
-            View Creatives PPT →
-          </a>
+          {driveLink && (
+            <a
+              href={driveLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors"
+            >
+              View Creatives PPT →
+            </a>
+          )}
         </div>
       ) : isEasyDone && activeQuestion === "easy" ? (
         <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center shrink-0">
           <span className="text-amber-400 text-sm font-medium">
-            Easy question done! Proceed to the Medium question.
+            Question 1 solved! Click “Proceed to Question 2” to continue.
           </span>
         </div>
       ) : null}
@@ -357,6 +357,7 @@ export default function ContestPage() {
           <QuestionPanel
             question={currentQuestion}
             score={currentScore}
+            questionNumber={activeQuestion === "easy" ? 1 : 2}
           />
         </div>
 
@@ -385,17 +386,9 @@ export default function ContestPage() {
           onViewLeaderboard={handleViewLeaderboard}
           onNextQuestion={
             activeQuestion === "easy" &&
-            questionsData?.medium_question != null &&
-            (submissionResult.status === "Accepted" ||
-              submissionResult.submissions_remaining === 0)
+            submissionResult.easy_solved === true &&
+            questionsData?.medium_question != null
               ? handleNextQuestion
-              : undefined
-          }
-          driveLink={
-            activeQuestion === "medium" &&
-            (submissionResult.status === "Accepted" ||
-              submissionResult.submissions_remaining === 0)
-              ? CREATIVES_DRIVE_LINK
               : undefined
           }
         />
